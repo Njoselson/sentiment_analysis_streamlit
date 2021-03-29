@@ -56,7 +56,7 @@ def save_data_for_training(data, amount, data_dir):
     return st.write("Data Saved!")
 
 
-def train_model(data_dir):
+def train_model(data_dir, max_epochs):
     st.write('Creating word corpus for training...')
     corpus = ClassificationCorpus(data_dir)
     label_dict = corpus.make_label_dictionary()
@@ -75,12 +75,15 @@ def train_model(data_dir):
     classifier = TextClassifier(
         document_embeddings, label_dictionary=label_dict)
     trainer = ModelTrainer(classifier, corpus)
-    trainer.train('model-saves',
-                  learning_rate=0.1,
-                  mini_batch_size=32,
-                  anneal_factor=0.5,
-                  patience=8,
-                  max_epochs=200)
+    trainer.train(
+        'model-saves',
+        learning_rate=0.1,
+        mini_batch_size=32,
+        anneal_factor=0.5,
+        patience=8,
+        max_epochs=max_epochs,
+        checkpoint=True
+    )
     st.write('Model Training Finished!')
 
 
@@ -96,38 +99,42 @@ def run_the_trainer():
     st.table(tweet_data_processed.head())
 
     st.write('Saving processed data for training! How much data should I use?')
-    amount = st.slider('Amount', 0.0, 100.0, 12.5)
+    amount = st.slider('Amount', 0.0, 100.0, 100.0)
     data_dir = './processed-data'
     save_data_for_training(tweet_data_processed, amount/100, data_dir)
-
+    
+    max_epochs = st.slider('What is the max epochs you want to train for?', 0, 200, 10)
+    st.write('Model training takes a while, are you sure you want to train the model?')
+    
     final_model = Path('model-saves/final-model.pt')
     if final_model.is_file():
         st.write('You already have a saved model! Do you want to retrain it?')
-        if st.button('Rerun'):
-            st.write('Train Model!')
-            train_model(data_dir)
-        else:
-            st.write("Don't train model!")
-            pass
-    else:
-        st.write('Train Model!')
-        train_model(data_dir)
+
+    if st.button('Train the Model!'):
+        st.write('Training Model!')
+        train_model(data_dir, max_epochs)
 
 
 def run_the_app():
     st.subheader('Single sentence classification')
 
     tweet_input = st.text_input('Sentence:')
-    classifier = TextClassifier.load('model-saves/final-model.pt')
-    sentence_data = Sentence(preprocess(tweet_input))
+    try:
+        classifier = TextClassifier.load('model-saves/final-model.pt')
+        sentence_data = Sentence(preprocess(tweet_input))
 
-    classifier.predict(sentence_data)
-    label_dict = {'0': 'Negative', '4': 'Positive'}
-    if len(sentence_data.labels) > 0:
-        st.write('Prediction:')
-        st.write(label_dict[sentence_data.labels[0].value] + ' with ',
-                 sentence_data.labels[0].score*100, '% confidence')
+        classifier.predict(sentence_data)
+        label_dict = {'0': 'Negative', '4': 'Positive'}
+        if len(sentence_data.labels) > 0:
+            st.write('Prediction:')
+            st.write(label_dict[sentence_data.labels[0].value] + ' with ',
+                    sentence_data.labels[0].score*100, '% confidence')
 
+    except: 
+        st.write('I dont think you have a model saved to be able to load!')
+        st.write('Go to Train Model to save a new model to predict from...')
+
+   
 
 def add_new_data_():
 
@@ -160,7 +167,7 @@ def add_new_data():
 
     st.write('This is the most recent sentiment data we have:')
     data_path = './processed-data/train.csv'
-    tweet_data = pd.read_csv(data_path, None)
+    tweet_data = pd.read_csv(data_path, header=None, sep='\t')
     last_data_table = st.table(tweet_data.tail())
     if st.button('Add new Data'):
         st.write('New data added to the training set!')
